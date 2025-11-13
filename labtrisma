@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Aplikasi Pemakaian Laboratorium - Tanpa Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Libraries for export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>.modal-bg{background:rgba(0,0,0,0.45)}</style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800">
+  <div id="app" class="max-w-6xl mx-auto p-6">
+    <header class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-semibold">Monitoring Pemakaian Laboratorium</h1>
+        <p class="text-sm text-gray-600">Versi tanpa login — semua pengguna dapat mengelola jadwal.</p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <button id="openAdd" class="bg-blue-600 text-white px-4 py-2 rounded">Tambah Jadwal</button>
+        <div class="relative inline-flex">
+          <button id="exportExcelBtn" class="ml-2 bg-green-500 text-white px-4 py-2 rounded shadow">Ekspor Excel</button>
+          <button id="exportPdfBtn" class="ml-2 bg-indigo-600 text-white px-4 py-2 rounded shadow">Ekspor PDF</button>
+        </div>
+        <button id="clearAllBtn" class="bg-red-500 text-white px-4 py-2 rounded shadow">Hapus Semua</button>
+      </div>
+    </header>
+
+    <!-- FILTER DAN TAMBAH -->
+    <section class="bg-white p-4 rounded shadow mb-6">
+      <div class="flex flex-col md:flex-row gap-3 items-center">
+        <div class="flex-1 flex gap-2 items-center">
+          <input id="filterSearch" type="text" placeholder="Cari (kelas, guru, kegiatan, siswa)" class="flex-1 p-2 border rounded" />
+          <button id="resetFilter" class="px-3 py-2 border rounded text-sm">Reset Filter</button>
+        </div>
+        <select id="filterLab" class="p-2 border rounded">
+          <option value="">-- Semua Lab --</option>
+          <option>Lab Fisika</option>
+          <option>Lab Kimia</option>
+          <option>Lab Biologi</option>
+          <option>Lab Bahasa</option>
+          <option>Lab Komputer Timur</option>
+          <option>Lab Komputer Barat</option>
+        </select>
+        <select id="filterDay" class="p-2 border rounded">
+          <option value="">-- Semua Hari --</option>
+          <option>Senin</option>
+          <option>Selasa</option>
+          <option>Rabu</option>
+          <option>Kamis</option>
+          <option>Jumat</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- TABEL -->
+    <section>
+      <div class="overflow-x-auto bg-white rounded shadow">
+        <table class="min-w-full text-sm" id="scheduleTable">
+          <thead class="bg-gray-100 text-left">
+            <tr>
+              <th class="p-2">#</th>
+              <th class="p-2">Hari</th>
+              <th class="p-2">Waktu</th>
+              <th class="p-2">Lab</th>
+              <th class="p-2">Kelas</th>
+              <th class="p-2">Siswa</th>
+              <th class="p-2">Kegiatan</th>
+              <th class="p-2">Guru</th>
+              <th class="p-2">Jumlah</th>
+              <th class="p-2">Keterangan</th>
+              <th class="p-2">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="text-xs text-gray-500 mt-4">Data disimpan di localStorage browser. Backup dengan Ekspor Excel/PDF. Untuk multi-user, upload file ini ke server sekolah.</footer>
+  </div>
+
+  <!-- MODAL TAMBAH/EDIT -->
+  <div id="modalForm" class="fixed inset-0 hidden items-center justify-center modal-bg">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+      <h3 id="modalTitle" class="text-lg font-semibold mb-3">Tambah Jadwal</h3>
+      <form id="jadwalForm" class="flex flex-col gap-2">
+        <select id="hari" class="p-2 border rounded" required>
+          <option value="">-- Pilih Hari --</option>
+          <option>Senin</option><option>Selasa</option><option>Rabu</option><option>Kamis</option><option>Jumat</option>
+        </select>
+        <input id="waktu" class="p-2 border rounded" placeholder="Waktu (misal: 08.00 - 10.00)" required />
+        <select id="lab" class="p-2 border rounded" required>
+          <option value="">-- Pilih Lab --</option>
+          <option>Lab Fisika</option>
+          <option>Lab Kimia</option>
+          <option>Lab Biologi</option>
+          <option>Lab Bahasa</option>
+          <option>Lab Komputer Timur</option>
+          <option>Lab Komputer Barat</option>
+        </select>
+        <input id="kelas" class="p-2 border rounded" placeholder="Kelas" required />
+        <input id="siswa" class="p-2 border rounded" placeholder="Nama Siswa / Kelompok" required />
+        <input id="kegiatan" class="p-2 border rounded" placeholder="Kegiatan" required />
+        <input id="guru" class="p-2 border rounded" placeholder="Guru Penanggung Jawab" required />
+        <input id="jumlah" type="number" class="p-2 border rounded" placeholder="Jumlah Siswa" required />
+        <input id="keterangan" class="p-2 border rounded" placeholder="Keterangan (opsional)" />
+        <div class="flex justify-end gap-2 mt-2">
+          <button type="button" id="cancelBtn" class="border px-3 py-1 rounded">Batal</button>
+          <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script>
+// Single-file app without login
+const LS_KEY='labSchedule_nologin_v1';
+let data=JSON.parse(localStorage.getItem(LS_KEY)||'[]');
+
+// Elements
+const openAdd=document.getElementById('openAdd');
+const modalForm=document.getElementById('modalForm');
+const jadwalForm=document.getElementById('jadwalForm');
+const cancelBtn=document.getElementById('cancelBtn');
+const tableBody=document.getElementById('tableBody');
+const filterSearch=document.getElementById('filterSearch');
+const filterLab=document.getElementById('filterLab');
+const filterDay=document.getElementById('filterDay');
+const resetFilter=document.getElementById('resetFilter');
+const exportExcelBtn=document.getElementById('exportExcelBtn');
+const exportPdfBtn=document.getElementById('exportPdfBtn');
+const clearAllBtn=document.getElementById('clearAllBtn');
+let editId=null;
+
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function saveData(){localStorage.setItem(LS_KEY,JSON.stringify(data));}
+
+function matchesFilter(item){
+  const q = filterSearch.value.trim().toLowerCase();
+  const labF = filterLab.value;
+  const dayF = filterDay.value;
+  if(labF && item.lab !== labF) return false;
+  if(dayF && item.hari !== dayF) return false;
+  if(!q) return true;
+  const hay = [item.kelas,item.kegiatan,item.guru,item.siswa,item.keterangan,item.lab,item.waktu,item.hari].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+function render(){
+  tableBody.innerHTML='';
+  const filtered = data.filter(matchesFilter);
+  filtered.forEach((d,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class='p-2'>${i+1}</td><td class='p-2'>${d.hari}</td><td class='p-2'>${d.waktu}</td><td class='p-2'>${d.lab}</td><td class='p-2'>${d.kelas}</td><td class='p-2'>${d.siswa}</td><td class='p-2'>${d.kegiatan}</td><td class='p-2'>${d.guru}</td><td class='p-2'>${d.jumlah}</td><td class='p-2'>${d.keterangan||''}</td><td class='p-2 flex gap-1'><button class='editBtn border rounded px-2 text-xs text-blue-600' data-id='${d.id}'>Edit</button><button class='delBtn border rounded px-2 text-xs text-red-600' data-id='${d.id}'>Hapus</button></td>`;
+    tableBody.appendChild(tr);
+  });
+  document.querySelectorAll('.delBtn').forEach(b=>b.addEventListener('click',e=>{const id=e.target.dataset.id;if(confirm('Hapus data?')){data=data.filter(x=>x.id!==id);saveData();render();}}));
+  document.querySelectorAll('.editBtn').forEach(b=>b.addEventListener('click',e=>{const id=e.target.dataset.id;const item=data.find(x=>x.id===id);openModal(item);}));
+}
+
+openAdd.addEventListener('click',()=>openModal());
+function openModal(item=null){modalForm.classList.remove('hidden');modalForm.classList.add('flex');document.getElementById('modalTitle').textContent=item?'Edit Jadwal':'Tambah Jadwal';jadwalForm.reset();editId=item?item.id:null;if(item){document.getElementById('hari').value=item.hari;document.getElementById('waktu').value=item.waktu;document.getElementById('lab').value=item.lab;document.getElementById('kelas').value=item.kelas;document.getElementById('siswa').value=item.siswa;document.getElementById('kegiatan').value=item.kegiatan;document.getElementById('guru').value=item.guru;document.getElementById('jumlah').value=item.jumlah;document.getElementById('keterangan').value=item.keterangan||'';}}
+cancelBtn.addEventListener('click',()=>{modalForm.classList.add('hidden');modalForm.classList.remove('flex');});
+
+jadwalForm.addEventListener('submit',e=>{e.preventDefault();const obj={id:editId||uid(),hari:hari.value,waktu:waktu.value,lab:lab.value,kelas:kelas.value,siswa:siswa.value,kegiatan:kegiatan.value,guru:guru.value,jumlah:jumlah.value,keterangan:keterangan.value};if(editId){data=data.map(x=>x.id===editId?obj:x);}else{data.push(obj);}saveData();modalForm.classList.add('hidden');modalForm.classList.remove('flex');render();});
+
+// Filters: real-time
+[filterSearch,filterLab,filterDay].forEach(el=>el.addEventListener('input',render));
+resetFilter.addEventListener('click',()=>{filterSearch.value='';filterLab.value='';filterDay.value='';render();});
+
+// Clear all
+clearAllBtn.addEventListener('click',()=>{if(!confirm('Hapus semua data jadwal?')) return;data=[];saveData();render();});
+
+// EXPORT Excel
+exportExcelBtn.addEventListener('click',()=>{if(!data.length){alert('Tidak ada data untuk diekspor');return;}const rows = data.map(d=>({Hari:d.hari,Waktu:d.waktu,Lab:d.lab,Kelas:d.kelas,Siswa:d.siswa,Kegiatan:d.kegiatan,Guru:d.guru,Jumlah:d.jumlah,Keterangan:d.keterangan||''}));const ws = XLSX.utils.json_to_sheet(rows);const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Jadwal');const date = new Date().toISOString().slice(0,10);XLSX.writeFile(wb, `jadwal_lab_${date}.xlsx`);});
+
+// EXPORT PDF (with kop image on first page only)
+async function getKopImageData(){try{const res = await fetch('kop.png');if(res.ok){const blob=await res.blob(); return await blobToDataURL(blob)}}catch(e){}return null;}function blobToDataURL(blob){return new Promise(resolve=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsDataURL(blob);});}
+
+exportPdfBtn.addEventListener('click', async ()=>{
+  const { jsPDF } = window.jspdf;
+  if(!data.length){alert('Tidak ada data untuk diekspor');return;}
+  const columns = ['Hari','Waktu','Lab','Kelas','Siswa','Kegiatan','Guru','Jumlah','Keterangan'];
+  const rows = data.map(d=>[d.hari,d.waktu,d.lab,d.kelas,d.siswa,d.kegiatan,d.guru,d.jumlah,d.keterangan||'']);
+  const doc = new jsPDF('p','pt','a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let imgData = await getKopImageData();
+  if(!imgData){
+    const upload = confirm('Tidak menemukan file kop.png di folder yang sama. Klik OK untuk mengupload gambar kop dari perangkat Anda.');
+    if(upload){
+      const input = document.createElement('input'); input.type='file'; input.accept='image/*';
+      input.onchange = async (e)=>{const f = e.target.files[0]; if(!f) return; imgData = await blobToDataURL(f); await generatePdfWithKop(doc,pageWidth,columns,rows,imgData); };
+      input.click();
+      return;
+    } else {await generatePdfWithKop(doc,pageWidth,columns,rows,null);return;}
+  }
+  await generatePdfWithKop(doc,pageWidth,columns,rows,imgData);
+});
+
+async function generatePdfWithKop(doc,pageWidth,columns,rows,imgData){
+  let startY = 40;
+  if(imgData){
+    try{const img = new Image(); img.src = imgData; await new Promise(r=>img.onload=r); const ratio = img.width / img.height; const desiredW = pageWidth - 80; const desiredH = desiredW/ratio; doc.addImage(imgData,'PNG',40,startY,desiredW,desiredH); startY += desiredH + 10;}catch(e){console.warn('Gagal menambahkan kop image',e);}
+  }
+  const title = 'Laporan Penggunaan Laboratorium SMA Negeri 3 Denpasar';
+  doc.setFontSize(12); doc.setFont('helvetica','bold'); doc.text(title,pageWidth/2,startY+20,{align:'center'});
+  doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.text('Tanggal cetak: '+(new Date().toLocaleString()),pageWidth-40,startY+20,{align:'right'});
+  doc.autoTable({startY: startY+30,head: [columns],body: rows,styles: {fontSize:9},headStyles: {fillColor: [220,220,220]},margin: {left:40,right:40}});
+  const date = new Date().toISOString().slice(0,10);doc.save(`laporan_jadwal_lab_${date}.pdf`);
+}
+
+// initial render
+render();
+</script>
+</body>
+</html>
